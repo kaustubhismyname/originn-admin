@@ -2,79 +2,151 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, Filter, Loader2, Building2, Globe, Linkedin, Instagram, Twitter, Users, TrendingUp, Clock } from 'lucide-react';
-
-const API_URL = 'https://firstfound-platform-backend.vercel.app/featureProducts/all';
+import { API_ENDPOINTS, getAuthHeaders } from '../config/api';
 
 export default function AllStartupsPage() {
   const [startups, setStartups] = useState([]);
-  const [filteredStartups, setFilteredStartups] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [activeSearchTerm, setActiveSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [selectedProductType, setSelectedProductType] = useState('all');
   const [selectedStatus, setSelectedStatus] = useState('all');
+  const [selectedStage, setSelectedStage] = useState('all');
+  const [selectedTargetMarket, setSelectedTargetMarket] = useState('all');
+  const [summary, setSummary] = useState({ total: 0, onboarding_pending: 0, changes_pending: 0, approved: 0 });
+  const [pagination, setPagination] = useState({ next_cursor: null, has_next: false, limit: 50 });
 
   const navigate = useNavigate();
 
   useEffect(() => {
-    fetchStartups();
+    fetchSummary();
   }, []);
 
-  const fetchStartups = async () => {
-    try {
-      setLoading(true);
-      const res = await fetch(API_URL);
-      const result = await res.json();
+  useEffect(() => {
+    fetchStartups();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedStatus, selectedStage, selectedCategory, selectedProductType, selectedTargetMarket]);
 
-      if (result.data) {
-        setStartups(result.data);
-        setFilteredStartups(result.data);
+  const fetchSummary = async () => {
+    try {
+      const res = await fetch(API_ENDPOINTS.ADMIN_STARTUPS_SUMMARY, {
+        headers: getAuthHeaders(),
+      });
+      const result = await res.json();
+      if (res.ok && result.data) {
+        setSummary(result.data);
       }
-      setLoading(false);
-    } catch (err) {
-      setError('Failed to fetch startups. Please try again later.');
-      setLoading(false);
+    } catch (error) {
+      console.error('Failed to fetch summary:', error);
     }
   };
 
-  useEffect(() => {
-    const timeout = setTimeout(() => {
-      let filtered = [...startups];
-
-      if (searchTerm) {
-        filtered = filtered.filter(s =>
-          s.companyName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          s.description.toLowerCase().includes(searchTerm.toLowerCase())
-        );
+  const fetchStartups = async (cursor = null, append = false) => {
+    try {
+      if (append) {
+        setLoadingMore(true);
+      } else {
+        setLoading(true);
+        setStartups([]);
       }
-
-      if (selectedCategory !== 'all') {
-        filtered = filtered.filter(s => s.category === selectedCategory);
+      setError(null);
+      
+      // Build query params
+      const params = new URLSearchParams();
+      params.append('limit', '50');
+      
+      if (cursor) {
+        params.append('cursor', cursor);
       }
-
-      if (selectedProductType !== 'all') {
-        filtered = filtered.filter(s => s.productType === selectedProductType);
+      
+      if (activeSearchTerm) {
+        params.append('search_text', activeSearchTerm);
       }
-
+      
       if (selectedStatus !== 'all') {
-        filtered = filtered.filter(s => s.status === selectedStatus);
+        params.append('status', selectedStatus);
       }
+      if (selectedStage !== 'all') {
+        params.append('stage', selectedStage);
+      }
+      if (selectedCategory !== 'all') {
+        params.append('category', selectedCategory);
+      }
+      if (selectedProductType !== 'all') {
+        params.append('product_type', selectedProductType);
+      }
+      if (selectedTargetMarket !== 'all') {
+        params.append('target_market', selectedTargetMarket);
+      }
+      
+      const url = `${API_ENDPOINTS.ADMIN_STARTUPS}?${params.toString()}`;
+      const res = await fetch(url, {
+        headers: getAuthHeaders(),
+      });
+      const result = await res.json();
 
-      setFilteredStartups(filtered);
-    }, 300);
+      if (res.ok && result.data) {
+        if (append) {
+          setStartups(prev => [...prev, ...result.data]);
+        } else {
+          setStartups(result.data);
+        }
+        setPagination(result.pagination || { next_cursor: null, has_next: false, limit: 50 });
+      } else {
+        setError(result.message || 'Failed to fetch startups');
+      }
+    } catch (error) {
+      console.error('Error fetching startups:', error);
+      setError('Failed to fetch startups. Please try again later.');
+    } finally {
+      setLoading(false);
+      setLoadingMore(false);
+    }
+  };
 
-    return () => clearTimeout(timeout);
-  }, [searchTerm, selectedCategory, selectedProductType, selectedStatus, startups]);
+  const handleLoadMore = () => {
+    if (pagination.has_next && pagination.next_cursor) {
+      fetchStartups(pagination.next_cursor, true);
+    }
+  };
 
+  const handleSearch = () => {
+    const newSearchTerm = searchTerm.trim();
+    if (newSearchTerm !== activeSearchTerm) {
+      setActiveSearchTerm(newSearchTerm);
+    }
+  };
+
+  // Refetch when activeSearchTerm changes (including when cleared)
+  useEffect(() => {
+    // Skip initial render where activeSearchTerm is empty string by default
+    // Only fetch when it actually changes from user interaction
+    const isInitialRender = activeSearchTerm === '' && startups.length === 0;
+    if (!isInitialRender) {
+      fetchStartups();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSearchTerm]);
+
+  // No local filtering needed - API does it all
+  const displayedStartups = startups;
+  const hasMoreToShow = pagination.has_next;
+
+  // Extract unique values for filters
   const categories = [...new Set(startups.map(s => s.category).filter(Boolean))];
-  const productTypes = [...new Set(startups.map(s => s.productType).filter(Boolean))];
+  const productTypes = [...new Set(startups.map(s => s.product_type).filter(Boolean))];
+  const stages = [...new Set(startups.map(s => s.stage).filter(Boolean))];
+  const targetMarkets = [...new Set(startups.map(s => s.target_market).filter(Boolean))];
 
   const statusCounts = {
-    all: startups.length,
-    pending: startups.filter(s => s.status === 'pending').length,
-    approved: startups.filter(s => s.status === 'approved').length,
-    rejected: startups.filter(s => s.status === 'rejected').length,
+    all: summary.total,
+    onboarding_pending: summary.onboarding_pending,
+    changes_pending: summary.changes_pending,
+    approved: summary.approved,
+    rejected: summary.total - (summary.onboarding_pending + summary.changes_pending + summary.approved),
   };
 
   if (loading) return <Loading />;
@@ -85,17 +157,9 @@ export default function AllStartupsPage() {
       {/* Header */}
       <div className="bg-white border-b border-gray-200 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-4xl font-bold text-gray-900 mb-2">Startup Dashboard</h1>
-              <p className="text-gray-600">Manage and review all startup applications</p>
-            </div>
-            <div className="flex items-center gap-4">
-              <div className="text-right">
-                <p className="text-3xl font-bold text-indigo-600">{filteredStartups.length}</p>
-                <p className="text-sm text-gray-500">Total Startups</p>
-              </div>
-            </div>
+          <div>
+            <h1 className="text-4xl font-bold text-gray-900 mb-2">Startup Dashboard</h1>
+            <p className="text-gray-600">Manage and review all startup applications</p>
           </div>
         </div>
       </div>
@@ -112,12 +176,20 @@ export default function AllStartupsPage() {
             onClick={() => setSelectedStatus('all')}
           />
           <StatusCard
-            label="Pending"
-            count={statusCounts.pending}
+            label="Onboarding Pending"
+            count={statusCounts.onboarding_pending}
             icon={<Clock className="w-6 h-6" />}
             color="bg-gradient-to-br from-amber-500 to-orange-600"
-            active={selectedStatus === 'pending'}
-            onClick={() => setSelectedStatus('pending')}
+            active={selectedStatus === 'onboarding_pending'}
+            onClick={() => setSelectedStatus('onboarding_pending')}
+          />
+          <StatusCard
+            label="Changes Pending"
+            count={statusCounts.changes_pending}
+            icon={<Clock className="w-6 h-6" />}
+            color="bg-gradient-to-br from-yellow-500 to-amber-600"
+            active={selectedStatus === 'changes_pending'}
+            onClick={() => setSelectedStatus('changes_pending')}
           />
           <StatusCard
             label="Approved"
@@ -139,16 +211,26 @@ export default function AllStartupsPage() {
 
         {/* Search & Filters */}
         <div className="bg-white rounded-2xl shadow-lg p-6 mb-8 border border-gray-100">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="relative md:col-span-1">
-              <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-              <input
-                type="text"
-                placeholder="Search by name or description..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
-              />
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
+            <div className="relative md:col-span-2 flex gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                <input
+                  type="text"
+                  placeholder="Search by name, description, founder..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+                  className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+                />
+              </div>
+              <button
+                onClick={handleSearch}
+                className="px-6 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition font-medium flex items-center gap-2 whitespace-nowrap"
+              >
+                <Search className="w-5 h-5" />
+                Search
+              </button>
             </div>
             
             <div className="relative">
@@ -174,42 +256,98 @@ export default function AllStartupsPage() {
                 {productTypes.map(type => <option key={type} value={type}>{type}</option>)}
               </select>
             </div>
+            
+            <div className="relative">
+              <Filter className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+              <select
+                value={selectedStage}
+                onChange={(e) => setSelectedStage(e.target.value)}
+                className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none bg-white cursor-pointer transition"
+              >
+                <option value="all">All Stages</option>
+                {stages.map(stage => <option key={stage} value={stage}>{stage}</option>)}
+              </select>
+            </div>
+
+            <div className="relative">
+              <Filter className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+              <select
+                value={selectedTargetMarket}
+                onChange={(e) => setSelectedTargetMarket(e.target.value)}
+                className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none bg-white cursor-pointer transition"
+              >
+                <option value="all">All Markets</option>
+                {targetMarkets.map(market => <option key={market} value={market}>{market}</option>)}
+              </select>
+            </div>
           </div>
         </div>
 
-        {/* Results Info */}
-        {searchTerm || selectedCategory !== 'all' || selectedProductType !== 'all' || selectedStatus !== 'all' ? (
-          <div className="mb-6 flex items-center justify-between">
-            <p className="text-gray-600">
-              Showing <span className="font-semibold text-gray-900">{filteredStartups.length}</span> results
-            </p>
+        {/* Results Info - Show when filters or search are active */}
+        {(activeSearchTerm || selectedCategory !== 'all' || selectedProductType !== 'all' || selectedStatus !== 'all' || selectedStage !== 'all' || selectedTargetMarket !== 'all') && (
+          <div className="mb-6 bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Filter className="w-5 h-5 text-blue-600" />
+              <p className="text-blue-900">
+                Showing <span className="font-bold">{displayedStartups.length}</span> result{displayedStartups.length !== 1 ? 's' : ''}
+                {activeSearchTerm && <span className="ml-1">for "<span className="font-semibold">{activeSearchTerm}</span>"</span>}
+              </p>
+            </div>
             <button
               onClick={() => {
                 setSearchTerm('');
+                setActiveSearchTerm('');
                 setSelectedCategory('all');
                 setSelectedProductType('all');
                 setSelectedStatus('all');
+                setSelectedStage('all');
+                setSelectedTargetMarket('all');
               }}
-              className="text-indigo-600 hover:text-indigo-700 font-medium text-sm"
+              className="text-blue-600 hover:text-blue-800 font-medium text-sm flex items-center gap-1 hover:underline"
             >
               Clear all filters
             </button>
           </div>
-        ) : null}
+        )}
 
         {/* Startups Grid */}
-        {filteredStartups.length === 0 ? (
+        {displayedStartups.length === 0 ? (
           <div className="text-center py-16 bg-white rounded-2xl shadow-lg border border-gray-100">
             <Building2 className="w-20 h-20 text-gray-300 mx-auto mb-4" />
             <h3 className="text-xl font-semibold text-gray-700 mb-2">No startups found</h3>
             <p className="text-gray-500">Try adjusting your filters or search terms</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredStartups.map(startup => (
-              <StartupCard key={startup._id} startup={startup} onClick={() => navigate(`/startup-profile/${startup._id}`)} />
-            ))}
-          </div>
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {displayedStartups.map(startup => (
+                <StartupCard key={startup.id} startup={startup} onClick={() => navigate(`/startup-profile/${startup.id}`)} />
+              ))}
+            </div>
+
+            {/* Load More Button */}
+            {hasMoreToShow && (
+              <div className="mt-8 flex justify-center">
+                <button
+                  onClick={handleLoadMore}
+                  disabled={loadingMore}
+                  className="px-8 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition font-medium shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {loadingMore ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      Loading...
+                    </>
+                  ) : (
+                    <>
+                      <TrendingUp className="w-5 h-5" />
+                      Load More Startups
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
@@ -246,9 +384,17 @@ function StartupCard({ startup, onClick }) {
           return 'bg-emerald-100 text-emerald-700 border-emerald-200';
         case 'rejected':
           return 'bg-rose-100 text-rose-700 border-rose-200';
+        case 'changes_pending':
+          return 'bg-yellow-100 text-yellow-700 border-yellow-200';
+        case 'onboarding_pending':
         default:
           return 'bg-amber-100 text-amber-700 border-amber-200';
       }
+    };
+
+    const formatStatus = (status) => {
+      if (!status) return 'Pending';
+      return status.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
     };
   
     return (
@@ -258,16 +404,16 @@ function StartupCard({ startup, onClick }) {
       >
         {/* Cover Image */}
         <div className="h-48 bg-gray-200 relative overflow-hidden rounded-t-2xl">
-          {startup.coverPhoto && !imageError ? (
+          {startup.cover_photo && !imageError ? (
             <img
-              src={startup.coverPhoto}
-              alt={startup.companyName}
+              src={startup.cover_photo}
+              alt={startup.company_name}
               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
               onError={() => setImageError(true)}
             />
           ) : (
-            <div className="flex items-center justify-center h-full bg-gray-100">
-              <Building2 className="w-16 h-16 text-gray-300" />
+            <div className="flex items-center justify-center h-full bg-gradient-to-br from-indigo-100 to-purple-100">
+              <Building2 className="w-16 h-16 text-indigo-300" />
             </div>
           )}
           {/* Status Badge */}
@@ -276,23 +422,23 @@ function StartupCard({ startup, onClick }) {
               startup.status
             )}`}
           >
-            {startup.status.charAt(0).toUpperCase() + startup.status.slice(1)}
+            {formatStatus(startup.status)}
           </span>
         </div>
   
         {/* Logo & Details */}
         <div className="p-4">
           <div className="flex items-center gap-4 mb-3">
-            <div className="w-12 h-12 rounded-xl overflow-hidden flex-shrink-0 bg-gray-100 border border-gray-200">
+            <div className="w-12 h-12 rounded-xl overflow-hidden flex-shrink-0 bg-gray-100 border border-gray-200 flex items-center justify-center">
               {startup.logo ? (
-                <img src={startup.logo} alt={startup.companyName} className="w-full h-full object-cover" />
+                <img src={startup.logo} alt={startup.company_name} className="w-full h-full object-cover" />
               ) : (
-                <Building2 className="w-8 h-8 text-gray-400 m-auto" />
+                <Building2 className="w-6 h-6 text-gray-400" />
               )}
             </div>
-            <div className="flex-1">
-              <h3 className="text-lg font-semibold text-gray-900 line-clamp-1">{startup.companyName}</h3>
-              <p className="text-gray-500 text-sm line-clamp-2">{startup.description}</p>
+            <div className="flex-1 min-w-0">
+              <h3 className="text-lg font-semibold text-gray-900 line-clamp-1">{startup.company_name || 'Unnamed Startup'}</h3>
+              <p className="text-gray-500 text-sm line-clamp-2">{startup.about_startup || startup.short_description || 'No description available'}</p>
             </div>
           </div>
   
@@ -303,9 +449,14 @@ function StartupCard({ startup, onClick }) {
                 {startup.category}
               </span>
             )}
-            {startup.productType && (
+            {startup.product_type && (
               <span className="text-xs font-medium bg-purple-100 text-purple-700 px-2 py-1 rounded-full">
-                {startup.productType}
+                {startup.product_type}
+              </span>
+            )}
+            {startup.stage && (
+              <span className="text-xs font-medium bg-blue-100 text-blue-700 px-2 py-1 rounded-full">
+                {startup.stage}
               </span>
             )}
           </div>
@@ -313,35 +464,59 @@ function StartupCard({ startup, onClick }) {
           {/* Metrics & Socials */}
           <div className="flex items-center justify-between text-gray-500 text-xs">
             <div className="flex items-center gap-3">
-              {startup.teamSize && (
+              {startup.team_members !== undefined && (
                 <div className="flex items-center gap-1">
-                  <Users className="w-4 h-4" /> {startup.teamSize}
+                  <Users className="w-4 h-4" /> {startup.team_members}
                 </div>
               )}
-              {startup.funding && (
-                <div className="flex items-center gap-1">
-                  <TrendingUp className="w-4 h-4" /> {startup.funding}
+              {startup.founder_name && (
+                <div className="flex items-center gap-1 text-gray-600">
+                  <span className="font-medium">{startup.founder_name}</span>
                 </div>
               )}
             </div>
             <div className="flex items-center gap-2">
-              {startup.website && (
-                <a href={startup.website} target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-indigo-600">
+              {startup.company_website && (
+                <a 
+                  href={startup.company_website} 
+                  target="_blank" 
+                  rel="noopener noreferrer" 
+                  className="text-gray-400 hover:text-indigo-600"
+                  onClick={(e) => e.stopPropagation()}
+                >
                   <Globe className="w-4 h-4" />
                 </a>
               )}
-              {startup.linkedin && (
-                <a href={startup.linkedin} target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-blue-600">
+              {startup.social_links?.linkedin && (
+                <a 
+                  href={startup.social_links.linkedin} 
+                  target="_blank" 
+                  rel="noopener noreferrer" 
+                  className="text-gray-400 hover:text-blue-600"
+                  onClick={(e) => e.stopPropagation()}
+                >
                   <Linkedin className="w-4 h-4" />
                 </a>
               )}
-              {startup.instagram && (
-                <a href={startup.instagram} target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-pink-500">
+              {startup.social_links?.instagram && (
+                <a 
+                  href={startup.social_links.instagram} 
+                  target="_blank" 
+                  rel="noopener noreferrer" 
+                  className="text-gray-400 hover:text-pink-500"
+                  onClick={(e) => e.stopPropagation()}
+                >
                   <Instagram className="w-4 h-4" />
                 </a>
               )}
-              {startup.twitter && (
-                <a href={startup.twitter} target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-blue-400">
+              {startup.social_links?.twitter && (
+                <a 
+                  href={startup.social_links.twitter} 
+                  target="_blank" 
+                  rel="noopener noreferrer" 
+                  className="text-gray-400 hover:text-blue-400"
+                  onClick={(e) => e.stopPropagation()}
+                >
                   <Twitter className="w-4 h-4" />
                 </a>
               )}

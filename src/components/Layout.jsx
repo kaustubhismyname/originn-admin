@@ -1,9 +1,10 @@
 import React, { useState } from "react";
-import { NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { Menu, X } from "lucide-react";
 
 const Layout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const navigate = useNavigate();
 
   const menuItems = [
     { name: "Dashboard", path: "/dashboard" },
@@ -20,6 +21,16 @@ const Layout = () => {
     if (window.innerWidth < 768) {
       setSidebarOpen(false);
     }
+  };
+
+  const handleLogout = () => {
+    // Clear all authentication data
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('token_type');
+    localStorage.removeItem('user');
+    
+    // Redirect to login
+    navigate('/login');
   };
 
   return (
@@ -81,7 +92,7 @@ const Layout = () => {
             </h1>
           </div>
           <button
-            onClick={() => (window.location.href = "/login")}
+            onClick={handleLogout}
             className="px-3 sm:px-4 py-2 rounded bg-[#6c3e26] hover:bg-[#8b5c3c] text-white text-sm sm:text-base transition"
           >
             Logout

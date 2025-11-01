@@ -10,8 +10,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-
-const API_BASE = "https://firstfound-platform-backend.vercel.app";
+import { API_ENDPOINTS, getAuthHeaders } from "../config/api";
 
 const Startups = () => {
   const [applications, setApplications] = useState([]);
@@ -25,7 +24,9 @@ const Startups = () => {
   const fetchApplications = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/startup/applications`);
+      const res = await fetch(`${API_ENDPOINTS.ADMIN_STARTUPS}?limit=200`, {
+        headers: getAuthHeaders(),
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Failed to fetch applications");
       setApplications(Array.isArray(data.data) ? data.data : []);
@@ -45,17 +46,20 @@ const Startups = () => {
   const handleStatusChange = async (id, newStatus) => {
     try {
       setUpdatingId(id);
-      const res = await fetch(`${API_BASE}/startup/${id}/status`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: newStatus }),
+      const endpoint = newStatus === "approved" 
+        ? API_ENDPOINTS.APPROVE_ONBOARDING(id)
+        : API_ENDPOINTS.REJECT_ONBOARDING(id);
+      
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: getAuthHeaders(),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Failed to update status");
 
       setApplications((prev) =>
         prev.map((app) =>
-          app._id === id ? { ...app, status: newStatus } : app
+          app.id === id ? { ...app, status: newStatus } : app
         )
       );
     } catch (err) {
@@ -75,13 +79,14 @@ const Startups = () => {
 
     try {
       setUpdatingId(id);
-      const res = await fetch(`${API_BASE}/startup/${id}`, {
+      const res = await fetch(`${API_ENDPOINTS.ADMIN_STARTUPS}/${id}`, {
         method: "DELETE",
+        headers: getAuthHeaders(),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Failed to delete startup");
 
-      setApplications((prev) => prev.filter((app) => app._id !== id));
+      setApplications((prev) => prev.filter((app) => app.id !== id));
     } catch (err) {
       console.error(err);
       alert(err.message || "Failed to delete startup");
@@ -90,9 +95,13 @@ const Startups = () => {
     }
   };
 
-  const filteredApplications = applications.filter((app) =>
-    filter === "all" ? true : app.status === filter
-  );
+  const filteredApplications = applications.filter((app) => {
+    if (filter === "all") return true;
+    if (filter === "pending") return app.status === "onboarding_pending" || app.status === "changes_pending";
+    if (filter === "approved") return app.status === "approved";
+    if (filter === "rejected") return app.status === "rejected";
+    return true;
+  });
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -100,6 +109,10 @@ const Startups = () => {
         return "bg-green-100 text-green-700 border-green-200";
       case "rejected":
         return "bg-red-100 text-red-700 border-red-200";
+      case "onboarding_pending":
+        return "bg-yellow-100 text-yellow-700 border-yellow-200";
+      case "changes_pending":
+        return "bg-orange-100 text-orange-700 border-orange-200";
       default:
         return "bg-yellow-100 text-yellow-700 border-yellow-200";
     }
@@ -111,6 +124,9 @@ const Startups = () => {
         return <Check className="w-4 h-4" />;
       case "rejected":
         return <X className="w-4 h-4" />;
+      case "onboarding_pending":
+      case "changes_pending":
+        return <Clock className="w-4 h-4" />;
       default:
         return <Clock className="w-4 h-4" />;
     }
@@ -118,7 +134,7 @@ const Startups = () => {
 
   const stats = {
     total: applications.length,
-    pending: applications.filter((app) => app.status === "pending").length,
+    pending: applications.filter((app) => app.status === "onboarding_pending" || app.status === "changes_pending").length,
     approved: applications.filter((app) => app.status === "approved").length,
     rejected: applications.filter((app) => app.status === "rejected").length,
   };
@@ -216,13 +232,13 @@ const Startups = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {filteredApplications.map((app) => (
               <div
-                key={app._id}
+                key={app.id}
                 className="bg-white rounded-xl shadow hover:shadow-lg transition p-4 sm:p-6 flex flex-col justify-between"
               >
                 <div>
                   <div className="flex flex-wrap items-center gap-2 mb-2">
                     <h3 className="text-lg sm:text-xl font-bold text-gray-800">
-                      {app.companyName}
+                      {app.company_name}
                     </h3>
                     <span
                       className={`px-3 py-1 rounded-full text-xs font-semibold border flex items-center gap-1 ${getStatusColor(
@@ -230,27 +246,29 @@ const Startups = () => {
                       )}`}
                     >
                       {getStatusIcon(app.status)}
-                      {app.status.charAt(0).toUpperCase() + app.status.slice(1)}
+                      {app.status === "onboarding_pending" ? "Onboarding Pending" : 
+                       app.status === "changes_pending" ? "Changes Pending" :
+                       app.status.charAt(0).toUpperCase() + app.status.slice(1)}
                     </span>
                   </div>
                   <p className="text-gray-600 mb-3 text-sm sm:text-base line-clamp-2 sm:line-clamp-none">
-                    {app.productDescription || app.aboutStartup}
+                    {app.product_description || app.about_startup}
                   </p>
                   <div className="flex flex-col sm:flex-row flex-wrap gap-3 text-xs sm:text-sm text-gray-500">
                     <div className="flex items-center gap-1">
                       <Calendar className="w-4 h-4" />
                       <span>
                         Applied:{" "}
-                        {new Date(app.createdAt).toLocaleDateString("en-IN")}
+                        {new Date(app.created_at).toLocaleDateString("en-IN")}
                       </span>
                     </div>
                     <div className="flex items-center gap-1 break-all">
                       <Mail className="w-4 h-4" />
-                      <span>{app.founderEmail}</span>
+                      <span>{app.founder_email}</span>
                     </div>
                     <div>
                       <span className="font-medium">Founder:</span>{" "}
-                      {app.founderName}
+                      {app.founder_name}
                     </div>
                   </div>
                 </div>
@@ -258,15 +276,15 @@ const Startups = () => {
                 {/* ✅ Action Buttons */}
                 <div className="flex flex-col sm:flex-row md:flex-col gap-2 mt-4">
                   <button
-                    onClick={() => handleStatusChange(app._id, "approved")}
-                    disabled={app.status === "approved" || updatingId === app._id}
+                    onClick={() => handleStatusChange(app.id, "approved")}
+                    disabled={app.status === "approved" || updatingId === app.id}
                     className={`flex items-center justify-center gap-2 px-3 py-2 rounded-lg font-medium text-sm sm:text-base transition ${
                       app.status === "approved"
                         ? "bg-gray-100 text-gray-400 cursor-not-allowed"
                         : "bg-green-600 text-white hover:bg-green-700"
                     }`}
                   >
-                    {updatingId === app._id ? (
+                    {updatingId === app.id ? (
                       <Loader2 className="w-4 h-4 animate-spin" />
                     ) : (
                       <Check className="w-4 h-4" />
@@ -275,15 +293,15 @@ const Startups = () => {
                   </button>
 
                   <button
-                    onClick={() => handleStatusChange(app._id, "rejected")}
-                    disabled={app.status === "rejected" || updatingId === app._id}
+                    onClick={() => handleStatusChange(app.id, "rejected")}
+                    disabled={app.status === "rejected" || updatingId === app.id}
                     className={`flex items-center justify-center gap-2 px-3 py-2 rounded-lg font-medium text-sm sm:text-base transition ${
                       app.status === "rejected"
                         ? "bg-gray-100 text-gray-400 cursor-not-allowed"
                         : "bg-red-600 text-white hover:bg-red-700"
                     }`}
                   >
-                    {updatingId === app._id ? (
+                    {updatingId === app.id ? (
                       <Loader2 className="w-4 h-4 animate-spin" />
                     ) : (
                       <X className="w-4 h-4" />
@@ -292,7 +310,7 @@ const Startups = () => {
                   </button>
 
                   <button
-                    onClick={() => navigate(`/startup/${app._id}`)}
+                    onClick={() => navigate(`/startup-profile/${app.id}`)}
                     className="flex items-center justify-center gap-2 px-3 py-2 rounded-lg font-medium text-sm sm:text-base bg-blue-600 text-white hover:bg-blue-700 transition"
                   >
                     <ExternalLink className="w-4 h-4" />
@@ -301,11 +319,11 @@ const Startups = () => {
 
                   {/* 🗑️ Delete */}
                   <button
-                    onClick={() => handleDelete(app._id)}
-                    disabled={updatingId === app._id}
+                    onClick={() => handleDelete(app.id)}
+                    disabled={updatingId === app.id}
                     className="flex items-center justify-center gap-2 px-3 py-2 rounded-lg font-medium text-sm sm:text-base bg-gray-800 text-white hover:bg-black transition"
                   >
-                    {updatingId === app._id ? (
+                    {updatingId === app.id ? (
                       <Loader2 className="w-4 h-4 animate-spin" />
                     ) : (
                       <Trash2 className="w-4 h-4" />

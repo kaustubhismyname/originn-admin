@@ -3,6 +3,7 @@ import {
   ArrowLeft, Check, X, Building2, Globe, Linkedin, Instagram, Twitter, Users, Loader2 
 } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { API_ENDPOINTS, getAuthHeaders } from '../config/api';
 
 export default function StartupProfile({ onBack }) {
   const { startupId } = useParams(); 
@@ -23,7 +24,10 @@ export default function StartupProfile({ onBack }) {
     try {
       setLoading(true);
       const res = await fetch(
-        `https://firstfound-platform-backend.vercel.app/featureProducts/admin/${startupId}`
+        API_ENDPOINTS.ADMIN_STARTUP_BY_ID(startupId),
+        {
+          headers: getAuthHeaders(),
+        }
       );
       const result = await res.json();
 
@@ -32,7 +36,8 @@ export default function StartupProfile({ onBack }) {
       } else {
         setError(result.message || 'Startup not found');
       }
-    } catch (err) {
+    } catch (error) {
+      console.error('Error fetching startup:', error);
       setError('Failed to fetch startup details.');
     } finally {
       setLoading(false);
@@ -44,14 +49,14 @@ export default function StartupProfile({ onBack }) {
       setUpdating(true);
       setStatusMessage(null);
 
-      const response = await fetch(
-        `https://firstfound-platform-backend.vercel.app/featureProducts/${startupId}/update-status`,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status: newStatus }),
-        }
-      );
+      const endpoint = newStatus === 'approved' 
+        ? API_ENDPOINTS.APPROVE_ONBOARDING(startupId)
+        : API_ENDPOINTS.REJECT_ONBOARDING(startupId);
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+      });
 
       const result = await response.json();
 
@@ -61,7 +66,8 @@ export default function StartupProfile({ onBack }) {
       } else {
         setStatusMessage({ type: 'error', text: result.message || 'Failed to update status' });
       }
-    } catch (err) {
+    } catch (error) {
+      console.error('Error updating status:', error);
       setStatusMessage({ type: 'error', text: 'Failed to update status. Please try again.' });
     } finally {
       setUpdating(false);
@@ -130,10 +136,10 @@ export default function StartupProfile({ onBack }) {
         {/* Cover Photo */}
         <div className="bg-white rounded-xl shadow-lg overflow-hidden mb-6">
           <div className="h-64 bg-gradient-to-r from-indigo-500 to-purple-600 relative">
-            {startup.coverPhoto ? (
+            {startup.cover_photo ? (
               <img 
-                src={startup.coverPhoto} 
-                alt={startup.companyName}
+                src={startup.cover_photo} 
+                alt={startup.company_name}
                 className="w-full h-full object-cover"
               />
             ) : (
@@ -151,7 +157,7 @@ export default function StartupProfile({ onBack }) {
                   {startup.logo ? (
                     <img 
                       src={startup.logo} 
-                      alt={startup.companyName}
+                      alt={startup.company_name}
                       className="w-full h-full rounded-2xl object-cover"
                     />
                   ) : (
@@ -160,7 +166,7 @@ export default function StartupProfile({ onBack }) {
                 </div>
 
                 <div className="pt-4">
-                  <h1 className="text-4xl font-bold text-gray-900 mb-2">{startup.companyName}</h1>
+                  <h1 className="text-4xl font-bold text-gray-900 mb-2">{startup.company_name}</h1>
                   <div className="flex items-center gap-3 flex-wrap">
                     <span className={`px-4 py-2 rounded-full text-sm font-semibold ${
                       startup.status === 'approved' 
@@ -174,9 +180,9 @@ export default function StartupProfile({ onBack }) {
                     <span className="px-4 py-2 bg-indigo-100 text-indigo-700 rounded-full text-sm font-medium">
                       {startup.category}
                     </span>
-                    {startup.productType && (
+                    {startup.product_type && (
                       <span className="px-4 py-2 bg-purple-100 text-purple-700 rounded-full text-sm font-medium">
-                        {startup.productType}
+                        {startup.product_type}
                       </span>
                     )}
                   </div>
@@ -206,29 +212,29 @@ export default function StartupProfile({ onBack }) {
 
             {/* Social Links */}
             <div className="flex items-center gap-4 mt-6 pt-6 border-t border-gray-100 flex-wrap">
-              {startup.website && (
-                <a href={startup.website} target="_blank" rel="noopener noreferrer" 
+              {startup.company_website && (
+                <a href={startup.company_website} target="_blank" rel="noopener noreferrer" 
                    className="flex items-center gap-2 text-gray-600 hover:text-indigo-600 transition">
                   <Globe className="w-5 h-5" />
                   <span className="text-sm font-medium">Website</span>
                 </a>
               )}
-              {startup.linkedin && (
-                <a href={startup.linkedin} target="_blank" rel="noopener noreferrer"
+              {startup.social_links?.linkedin && (
+                <a href={startup.social_links.linkedin} target="_blank" rel="noopener noreferrer"
                    className="flex items-center gap-2 text-gray-600 hover:text-blue-600 transition">
                   <Linkedin className="w-5 h-5" />
                   <span className="text-sm font-medium">LinkedIn</span>
                 </a>
               )}
-              {startup.instagram && (
-                <a href={startup.instagram} target="_blank" rel="noopener noreferrer"
+              {startup.social_links?.instagram && (
+                <a href={startup.social_links.instagram} target="_blank" rel="noopener noreferrer"
                    className="flex items-center gap-2 text-gray-600 hover:text-pink-600 transition">
                   <Instagram className="w-5 h-5" />
                   <span className="text-sm font-medium">Instagram</span>
                 </a>
               )}
-              {startup.twitter && (
-                <a href={startup.twitter} target="_blank" rel="noopener noreferrer"
+              {startup.social_links?.twitter && (
+                <a href={startup.social_links.twitter} target="_blank" rel="noopener noreferrer"
                    className="flex items-center gap-2 text-gray-600 hover:text-blue-400 transition">
                   <Twitter className="w-5 h-5" />
                   <span className="text-sm font-medium">Twitter</span>
@@ -245,8 +251,16 @@ export default function StartupProfile({ onBack }) {
             {/* About */}
             <div className="bg-white rounded-xl shadow-lg p-8">
               <h2 className="text-2xl font-bold text-gray-900 mb-4">About</h2>
-              <p className="text-gray-600 leading-relaxed">{startup.description}</p>
+              <p className="text-gray-600 leading-relaxed">{startup.about_startup}</p>
             </div>
+
+            {/* Product Description */}
+            {startup.product_description && (
+              <div className="bg-white rounded-xl shadow-lg p-8">
+                <h2 className="text-2xl font-bold text-gray-900 mb-4">Product Description</h2>
+                <p className="text-gray-600 leading-relaxed">{startup.product_description}</p>
+              </div>
+            )}
 
             {/* Founders */}
             <div className="bg-white rounded-xl shadow-lg p-8">
@@ -257,13 +271,13 @@ export default function StartupProfile({ onBack }) {
                     <div key={idx} className="flex items-start gap-4 p-4 border border-gray-200 rounded-lg hover:border-indigo-300 transition">
                       <div className="w-16 h-16 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0">
                         {founder.photo ? (
-                          <img src={founder.photo} alt={founder.name} className="w-full h-full rounded-full object-cover" />
+                          <img src={founder.photo} alt={founder.full_name} className="w-full h-full rounded-full object-cover" />
                         ) : (
                           <Users className="w-8 h-8 text-indigo-600" />
                         )}
                       </div>
                       <div>
-                        <h3 className="font-bold text-gray-900">{founder.name}</h3>
+                        <h3 className="font-bold text-gray-900">{founder.full_name}</h3>
                         <p className="text-sm text-indigo-600 font-medium">{founder.designation}</p>
                         <p className="text-sm text-gray-500 mt-1">{founder.institution}</p>
                       </div>
@@ -282,13 +296,13 @@ export default function StartupProfile({ onBack }) {
                     <div key={idx} className="flex items-start gap-4 p-4 border border-gray-200 rounded-lg hover:border-purple-300 transition">
                       <div className="w-16 h-16 rounded-full bg-purple-100 flex items-center justify-center flex-shrink-0">
                         {member.photo ? (
-                          <img src={member.photo} alt={member.name} className="w-full h-full rounded-full object-cover" />
+                          <img src={member.photo} alt={member.full_name} className="w-full h-full rounded-full object-cover" />
                         ) : (
                           <Users className="w-8 h-8 text-purple-600" />
                         )}
                       </div>
                       <div>
-                        <h3 className="font-bold text-gray-900">{member.name}</h3>
+                        <h3 className="font-bold text-gray-900">{member.full_name}</h3>
                         <p className="text-sm text-purple-600 font-medium">{member.designation}</p>
                         <p className="text-sm text-gray-500 mt-1">{member.institution}</p>
                       </div>
@@ -305,26 +319,52 @@ export default function StartupProfile({ onBack }) {
             <div className="bg-white rounded-xl shadow-lg p-6">
               <h2 className="text-xl font-bold text-gray-900 mb-4">Quick Info</h2>
               <div className="space-y-4">
-                <div>
-                  <p className="text-sm text-gray-500 mb-1">Registration No.</p>
-                  <p className="font-semibold text-gray-900">{startup.registrationNo}</p>
-                </div>
-                {startup.targetMarket && (
+                {startup.founder_email && (
+                  <div>
+                    <p className="text-sm text-gray-500 mb-1">Founder Email</p>
+                    <p className="font-semibold text-gray-900">{startup.founder_email}</p>
+                  </div>
+                )}
+                {startup.registration_no && (
+                  <div>
+                    <p className="text-sm text-gray-500 mb-1">Registration No.</p>
+                    <p className="font-semibold text-gray-900">{startup.registration_no}</p>
+                  </div>
+                )}
+                {startup.institute_name && (
+                  <div>
+                    <p className="text-sm text-gray-500 mb-1">Institute</p>
+                    <p className="font-semibold text-gray-900">{startup.institute_name}</p>
+                  </div>
+                )}
+                {startup.stage && (
+                  <div>
+                    <p className="text-sm text-gray-500 mb-1">Stage</p>
+                    <p className="font-semibold text-gray-900">{startup.stage}</p>
+                  </div>
+                )}
+                {startup.address && (
+                  <div>
+                    <p className="text-sm text-gray-500 mb-1">Address</p>
+                    <p className="font-semibold text-gray-900">{startup.address}</p>
+                  </div>
+                )}
+                {startup.target_market && (
                   <div>
                     <p className="text-sm text-gray-500 mb-1">Target Market</p>
-                    <p className="font-semibold text-gray-900">{startup.targetMarket}</p>
+                    <p className="font-semibold text-gray-900">{startup.target_market}</p>
                   </div>
                 )}
                 <div>
                   <p className="text-sm text-gray-500 mb-1">Created At</p>
                   <p className="font-semibold text-gray-900">
-                    {new Date(startup.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+                    {new Date(startup.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
                   </p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-500 mb-1">Last Updated</p>
                   <p className="font-semibold text-gray-900">
-                    {new Date(startup.updatedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+                    {new Date(startup.updated_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
                   </p>
                 </div>
               </div>
@@ -338,9 +378,15 @@ export default function StartupProfile({ onBack }) {
                   <span className="text-gray-600">Founders</span>
                   <span className="font-bold text-indigo-600">{startup.founders?.length || 0}</span>
                 </div>
-                <div className="flex items-center justify-between p-3 bg-purple-50 rounded-lg">
-                  <span className="text-gray-600">Team Members</span>
-                  <span className="font-bold text-purple-600">{startup.team?.length || 0}</span>
+                {startup.team_members && (
+                  <div className="flex items-center justify-between p-3 bg-purple-50 rounded-lg">
+                    <span className="text-gray-600">Team Size</span>
+                    <span className="font-bold text-purple-600">{startup.team_members}</span>
+                  </div>
+                )}
+                <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
+                  <span className="text-gray-600">Team Members Listed</span>
+                  <span className="font-bold text-green-600">{startup.team?.length || 0}</span>
                 </div>
               </div>
             </div>

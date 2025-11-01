@@ -12,6 +12,7 @@ import Transactions from "./components/Transactions";
 import Analytics from "./components/Analytics";
 import ProductDetails from "./components/ProductDetails";
 import AllStartupsPage from "./components/AllStartups";
+import ProtectedRoute from "./components/ProtectedRoute";
 
 
 function App() {
@@ -21,8 +22,12 @@ function App() {
         <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="/login" element={<Login />} />
 
-        {/* Admin routes */}
-        <Route path="/" element={<Layout />}>
+        {/* Admin routes - Protected */}
+        <Route path="/" element={
+          <ProtectedRoute>
+            <Layout />
+          </ProtectedRoute>
+        }>
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="users" element={<Users />} />
           <Route path="startups" element={<Startups />} />

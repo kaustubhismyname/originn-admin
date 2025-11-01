@@ -1,15 +1,18 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { API_ENDPOINTS } from "../config/api";
 
-const FIXED_EMAIL = "admin@originn.com";
-const FIXED_PASSWORD = "Jeet123@";
+const DEMO_EMAIL = "admin@originn.com";
+const DEMO_PASSWORD = "OriginAdmin@2025";
 
-const Login = ({ onLoginSuccess } = {}) => {
+const Login = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const navigate = useNavigate();
 
   const validate = () => {
     if (!email) return "Please enter email.";
@@ -19,7 +22,7 @@ const Login = ({ onLoginSuccess } = {}) => {
     return "";
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
     const vErr = validate();
@@ -29,27 +32,50 @@ const Login = ({ onLoginSuccess } = {}) => {
     }
 
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
-      if (email === FIXED_EMAIL && password === FIXED_PASSWORD) {
+
+    try {
+      const response = await fetch(API_ENDPOINTS.ADMIN_LOGIN, {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: email.trim(),
+          password: password,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        // Store authentication data
+        localStorage.setItem('access_token', data.access_token);
+        localStorage.setItem('token_type', data.token_type);
+        localStorage.setItem('user', JSON.stringify(data.user));
+        
         setSuccess(true);
         setError("");
-        if (typeof onLoginSuccess === "function") {
-          onLoginSuccess();
-        } else {
-          setTimeout(() => {
-            window.location.href = "/dashboard";
-          }, 700);
-        }
+        
+        // Redirect to dashboard
+        setTimeout(() => {
+          navigate('/dashboard');
+        }, 700);
       } else {
-        setError("Invalid email or password. Use the demo credentials below.");
+        // Handle error response (401 or other errors)
+        setError(data.detail || 'Invalid credentials. Please try again.');
       }
-    }, 600);
+    } catch (err) {
+      console.error('Login error:', err);
+      setError('Network error. Please check your connection and try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const fillDemo = () => {
-    setEmail(FIXED_EMAIL);
-    setPassword(FIXED_PASSWORD);
+    setEmail(DEMO_EMAIL);
+    setPassword(DEMO_PASSWORD);
     setError("");
   };
 
@@ -123,7 +149,7 @@ const Login = ({ onLoginSuccess } = {}) => {
             </form>
 
             <div className="mt-4 text-center text-xs text-gray-600">
-              Demo credentials — <span className="font-medium">{FIXED_EMAIL}</span> / <span className="font-medium">{FIXED_PASSWORD}</span>
+              Demo credentials — <span className="font-medium">{DEMO_EMAIL}</span> / <span className="font-medium">{DEMO_PASSWORD}</span>
               <button
                 onClick={fillDemo}
                 className="ml-2 px-2 py-1 rounded bg-gray-200 hover:bg-gray-300 text-xs"
